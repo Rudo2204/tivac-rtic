@@ -9,7 +9,7 @@ cortex-m = "0.7"
 cortex-m-rt = "0.6"
 cortex-m-semihosting = "0.3.7"
 panic-halt = "0.2.0"
-tm4c123x-hal = { git = "https://github.com/Rudo2204/tm4c-rs.git", branch = "tm4c123x-patch", features = ["rt"]}
+tm4c123x-hal = { git = "https://github.com/Rudo2204/tm4c-rs.git", rev = "9a9580d", features = ["rt"]}
 embedded-hal = "0.2"
 tm4c123x = { git = "https://github.com/rust-embedded-community/tm4c-rs.git"}
 cortex-m-rtic = "0.5.6"

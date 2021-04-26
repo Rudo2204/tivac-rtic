@@ -369,7 +369,7 @@ dependencies = [
 [[package]]
 name = "tm4c-hal"
 version = "0.4.1"
-source = "git+https://github.com/Rudo2204/tm4c-rs.git?branch=tm4c123x-patch#16966d140a963eda4e86669a0af7248882a40e33"
+source = "git+https://github.com/Rudo2204/tm4c-rs.git?rev=9a9580d#9a9580dbc024ba6b82630226c585975ab6b08dd7"
 dependencies = [
  "cast",
  "cortex-m 0.6.7",
@@ -391,7 +391,7 @@ dependencies = [
 [[package]]
 name = "tm4c123x-hal"
 version = "0.10.2"
-source = "git+https://github.com/Rudo2204/tm4c-rs.git?branch=tm4c123x-patch#16966d140a963eda4e86669a0af7248882a40e33"
+source = "git+https://github.com/Rudo2204/tm4c-rs.git?rev=9a9580d#9a9580dbc024ba6b82630226c585975ab6b08dd7"
 dependencies = [
  "cast",
  "cortex-m 0.6.7",
