@@ -13,6 +13,9 @@ tm4c123x-hal = { git = "https://github.com/Rudo2204/tm4c-rs.git", branch = "tm4c
 embedded-hal = "0.2"
 tm4c123x = { git = "https://github.com/rust-embedded-community/tm4c-rs.git"}
 cortex-m-rtic = "0.5.6"
+hd44780-driver = "0.4.0"
+alloc-cortex-m = "0.4.1"
+numtoa = "0.2.3"
 
 [[bin]]
 name = "tivac_rtic"
