@@ -7,7 +7,8 @@ use hal::gpio::{Floating, Input, Output, PushPull};
 use hd44780_driver::{Cursor, CursorBlink, Display, DisplayMode, HD44780};
 use numtoa::NumToA;
 use rtic::cyccnt::U32Ext;
-use tm4c123x_hal::delay::Delay;
+use tm4c123x::TIMER0;
+use tm4c123x_hal::delay::DelayFromCountDownTimer;
 use tm4c123x_hal::gpio::{
     gpioa::PA2,
     gpioc::{PC4, PC5, PC6, PC7},
@@ -16,12 +17,12 @@ use tm4c123x_hal::gpio::{
 };
 use tm4c123x_hal::{self as hal, prelude::*};
 
-const PERIOD: u32 = 100_000_000;
+const PERIOD: u32 = 50_000_000;
 
 #[rtic::app(device = tm4c123x, peripherals = true, monotonic = rtic::cyccnt::CYCCNT)]
 const APP: () = {
     struct Resources {
-        delay: Delay,
+        delay: DelayFromCountDownTimer<hal::timer::Timer<TIMER0>>,
         led: PF1<Output<PushPull>>,
         lcd: HD44780<
             hd44780_driver::bus::FourBitBus<
@@ -50,7 +51,15 @@ const APP: () = {
         );
         let clocks = sysctl.clock_setup.freeze();
 
-        let mut delay = tm4c123x_hal::delay::Delay::new(core.SYST, &clocks);
+        let tim0 = hal::timer::Timer::timer0(
+            peripherals.TIMER0,
+            hal::time::Hertz(400),
+            &sysctl.power_control,
+            &clocks,
+        );
+
+        let mut delay = hal::delay::DelayFromCountDownTimer::new(tim0);
+        //let mut delay = tm4c123x_hal::delay::Delay::new(core.SYST, &clocks);
 
         let pins_f = peripherals.GPIO_PORTF.split(&sysctl.power_control);
         let mut led = pins_f.pf1.into_push_pull_output();
@@ -70,6 +79,7 @@ const APP: () = {
         let mut lcd = HD44780::new_4bit(rs, en, b4, b5, b6, b7, &mut delay).unwrap();
         lcd.reset(&mut delay).unwrap();
         lcd.clear(&mut delay).unwrap();
+        lcd.write_str("HELLO RTIC", &mut delay).unwrap();
 
         lcd.set_display_mode(
             DisplayMode {
@@ -85,7 +95,7 @@ const APP: () = {
         button_one.set_interrupt_mode(hal::gpio::InterruptMode::EdgeRising);
         button_one.clear_interrupt();
 
-        let mut buffer = [0u8; 10];
+        let buffer = [0u8; 10];
 
         cx.schedule.blinker(cx.start + PERIOD.cycles()).unwrap();
         init::LateResources {
@@ -129,7 +139,7 @@ const APP: () = {
         lcd.write_str(BUTTON_COUNTER.numtoa_str(10, buffer), delay)
             .unwrap();
 
-        BUTTON_COUNTER.wrapping_add(1);
+        *BUTTON_COUNTER = BUTTON_COUNTER.wrapping_add(1);
 
         button_one.clear_interrupt();
     }
