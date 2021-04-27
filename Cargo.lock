@@ -162,6 +162,15 @@ dependencies = [
 
 [[package]]
 name = "generic-array"
+version = "0.11.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "667f6ea017b297ec65b8a108c6e9ad6879460721fb3b6b23abf690970147fc28"
+dependencies = [
+ "typenum",
+]
+
+[[package]]
+name = "generic-array"
 version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ffdf9f34f1447443d37393cc6c2b8313aebddcd96906caf34e54c68d8e57d7bd"
@@ -239,6 +248,16 @@ name = "linked_list_allocator"
 version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "822add9edb1860698b79522510da17bef885171f75aa395cff099d770c609c24"
+
+[[package]]
+name = "mfrc522"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3af70ed390d4952988d5681a81d736c0442adc235d51ad06997e7cd1419b9ef8"
+dependencies = [
+ "embedded-hal",
+ "generic-array 0.11.2",
+]
 
 [[package]]
 name = "nb"
@@ -360,6 +379,7 @@ dependencies = [
  "cortex-m-semihosting",
  "embedded-hal",
  "hd44780-driver",
+ "mfrc522",
  "numtoa",
  "panic-halt",
  "tm4c123x",
