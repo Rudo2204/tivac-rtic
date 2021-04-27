@@ -3,28 +3,35 @@
 
 use panic_halt as _; // you can put a breakpoint on `rust_begin_unwind` to catch panics
 
-use hal::gpio::{Input, Output, PullUp, PushPull};
+use embedded_hal::digital::v1_compat::OldOutputPin;
+use hal::gpio::{AlternateFunction, Floating, Input, InterruptMode, Output, PullUp, PushPull, AF2};
 use hd44780_driver::{Cursor, CursorBlink, Display, DisplayMode, HD44780};
+use mfrc522::Mfrc522;
 use numtoa::NumToA;
 use rtic::cyccnt::U32Ext;
-use tm4c123x::TIMER0;
+use tm4c123x::{SSI2, TIMER0};
 use tm4c123x_hal::delay::DelayFromCountDownTimer;
 use tm4c123x_hal::gpio::{
     gpioa::PA2,
+    gpiob::{PB0, PB4, PB5, PB6, PB7},
     gpioc::{PC4, PC5, PC6, PC7},
     gpiod::PD6,
-    gpiof::{PF0, PF1},
+    gpiof::{PF0, PF1, PF2, PF3},
 };
+use tm4c123x_hal::spi::Spi;
 use tm4c123x_hal::timer::Timer;
 use tm4c123x_hal::{self as hal, prelude::*};
 
 const PERIOD: u32 = 80_000_000;
+const MASTER_CARD: [u8; 4] = [192, 33, 232, 239];
 
 #[rtic::app(device = tm4c123x, peripherals = true, monotonic = rtic::cyccnt::CYCCNT)]
 const APP: () = {
     struct Resources {
         delay: DelayFromCountDownTimer<Timer<TIMER0>>,
-        led: PF1<Output<PushPull>>,
+        red_led: PF1<Output<PushPull>>,
+        blue_led: PF2<Output<PushPull>>,
+        green_led: PF3<Output<PushPull>>,
         lcd: HD44780<
             hd44780_driver::bus::FourBitBus<
                 PA2<Output<PushPull>>,
@@ -37,6 +44,19 @@ const APP: () = {
         >,
         button_two: PF0<Input<PullUp>>,
         buffer: [u8; 10],
+        irq: PB0<Input<Floating>>,
+        //irq: PF4<Input<Floating>>,
+        mfrc522: Mfrc522<
+            Spi<
+                SSI2,
+                (
+                    PB4<AlternateFunction<AF2, PushPull>>,
+                    PB6<AlternateFunction<AF2, PushPull>>,
+                    PB7<AlternateFunction<AF2, PushPull>>,
+                ),
+            >,
+            OldOutputPin<PB5<Output<PushPull>>>,
+        >,
         #[init(0)]
         lcd_counter: u32,
         #[init(false)]
@@ -65,11 +85,14 @@ const APP: () = {
         );
 
         let mut delay = hal::delay::DelayFromCountDownTimer::new(tim0);
-        //let mut delay = tm4c123x_hal::delay::Delay::new(core.SYST, &clocks);
 
         let mut pins_f = peripherals.GPIO_PORTF.split(&sysctl.power_control);
-        let mut led = pins_f.pf1.into_push_pull_output();
-        embedded_hal::digital::v2::OutputPin::set_low(&mut led).unwrap();
+        let mut red_led = pins_f.pf1.into_push_pull_output();
+        let mut blue_led = pins_f.pf2.into_push_pull_output();
+        let mut green_led = pins_f.pf3.into_push_pull_output();
+        embedded_hal::digital::v2::OutputPin::set_low(&mut red_led).unwrap();
+        embedded_hal::digital::v2::OutputPin::set_low(&mut blue_led).unwrap();
+        embedded_hal::digital::v2::OutputPin::set_low(&mut green_led).unwrap();
 
         let pins_a = peripherals.GPIO_PORTA.split(&sysctl.power_control);
         let pins_c = peripherals.GPIO_PORTC.split(&sysctl.power_control);
@@ -85,7 +108,6 @@ const APP: () = {
         let mut lcd = HD44780::new_4bit(rs, en, b4, b5, b6, b7, &mut delay).unwrap();
         lcd.reset(&mut delay).unwrap();
         lcd.clear(&mut delay).unwrap();
-        lcd.write_str("Hello RTIC", &mut delay).unwrap();
 
         lcd.set_display_mode(
             DisplayMode {
@@ -97,33 +119,63 @@ const APP: () = {
         )
         .unwrap();
 
-        //let mut button_two = pins_f.pf4.into_pull_up_input();
         let mut button_two = pins_f.pf0.unlock(&mut pins_f.control).into_pull_up_input();
-        button_two.set_interrupt_mode(hal::gpio::InterruptMode::EdgeFalling);
+        button_two.set_interrupt_mode(InterruptMode::EdgeFalling);
+
+        let mut pins_b = peripherals.GPIO_PORTB.split(&sysctl.power_control);
+        let sck = pins_b.pb4.into_af_push_pull(&mut pins_b.control);
+        let miso = pins_b.pb6.into_af_push_pull(&mut pins_b.control);
+        let mosi = pins_b.pb7.into_af_push_pull(&mut pins_b.control);
+        let nss = pins_b.pb5.into_push_pull_output();
+
+        let mut irq = pins_b.pb0.into_floating_input();
+        //let mut irq = pins_f.pf4.into_floating_input();
+        irq.set_interrupt_mode(InterruptMode::EdgeBoth);
+
+        let spi = tm4c123x_hal::spi::Spi::spi2(
+            peripherals.SSI2,
+            (sck, miso, mosi),
+            mfrc522::MODE,
+            hal::time::Hertz(1_000_000),
+            &clocks,
+            &sysctl.power_control,
+        );
+        let mfrc522 = Mfrc522::new(spi, OldOutputPin::from(nss)).unwrap();
 
         let buffer = [0u8; 10];
+        lcd.write_str("<<Scan Your Card", &mut delay).unwrap();
 
         cx.spawn.lcd_increment().ok();
 
         init::LateResources {
             delay: delay,
-            led: led,
+            red_led: red_led,
+            blue_led: blue_led,
+            green_led: green_led,
             lcd: lcd,
             button_two: button_two,
             buffer: buffer,
+            irq: irq,
+            mfrc522: mfrc522,
         }
     }
 
-    #[task(schedule = [lcd_increment], resources = [delay, lcd, lcd_counter, buffer])]
+    #[task(schedule = [lcd_increment], resources = [delay, lcd, lcd_counter, buffer], priority = 1)]
     fn lcd_increment(cx: lcd_increment::Context) {
-        let delay = cx.resources.delay;
-        let lcd = cx.resources.lcd;
+        let mut delay = cx.resources.delay;
+        let mut lcd = cx.resources.lcd;
         let lcd_counter = cx.resources.lcd_counter;
-        let buffer = cx.resources.buffer;
+        let mut buffer = cx.resources.buffer;
 
-        lcd.set_cursor_pos(40, delay).unwrap();
-        lcd.write_str(&lcd_counter.numtoa_str(10, buffer), delay)
-            .unwrap();
+        lcd.lock(|lcd| {
+            delay.lock(|delay| {
+                lcd.set_cursor_pos(40, delay).unwrap();
+                buffer.lock(|buffer| {
+                    lcd.write_str(&lcd_counter.numtoa_str(10, buffer), delay)
+                        .unwrap();
+                });
+            });
+        });
 
         *lcd_counter += 1;
         cx.schedule
@@ -131,15 +183,15 @@ const APP: () = {
             .unwrap();
     }
 
-    #[task(binds = GPIOF, resources = [button_two, led_state, led])]
+    #[task(binds = GPIOF, resources = [button_two, led_state, blue_led], priority = 2)]
     fn button_two(cx: button_two::Context) {
         let button_two = cx.resources.button_two;
-        let led = cx.resources.led;
+        let blue_led = cx.resources.blue_led;
         let led_state = cx.resources.led_state;
         if button_two.get_interrupt_status() {
             match *led_state {
-                true => embedded_hal::digital::v2::OutputPin::set_low(led).unwrap(),
-                false => embedded_hal::digital::v2::OutputPin::set_high(led).unwrap(),
+                true => embedded_hal::digital::v2::OutputPin::set_low(blue_led).unwrap(),
+                false => embedded_hal::digital::v2::OutputPin::set_high(blue_led).unwrap(),
             }
             *led_state = !*led_state;
         }
@@ -147,8 +199,55 @@ const APP: () = {
         button_two.clear_interrupt();
     }
 
+    #[task(binds = GPIOB,
+            resources = [irq, mfrc522, red_led, green_led, lcd, delay, buffer],
+            priority = 3)]
+    fn iss2_event(cx: iss2_event::Context) {
+        let mfrc522 = cx.resources.mfrc522;
+        let red_led = cx.resources.red_led;
+        let green_led = cx.resources.green_led;
+        let lcd = cx.resources.lcd;
+        let delay = cx.resources.delay;
+        let buffer = cx.resources.buffer;
+
+        if cx.resources.irq.get_interrupt_status() {
+            if let Ok(atqa) = mfrc522.reqa() {
+                if let Ok(uid) = mfrc522.select(&atqa) {
+                    lcd.clear(delay).unwrap();
+                    lcd.set_cursor_pos(0, delay).unwrap();
+                    lcd.write_str("ID: ", delay).unwrap();
+
+                    let card_uid = uid.bytes();
+                    for byte in card_uid {
+                        lcd.write_str(byte.numtoa_str(16, buffer), delay).unwrap();
+                    }
+                    if card_uid == &MASTER_CARD {
+                        embedded_hal::digital::v2::OutputPin::set_high(green_led).unwrap();
+                        lcd.set_cursor_pos(40, delay).unwrap();
+                        lcd.write_str("Access Granted!", delay).unwrap();
+                        delay.delay_ms(500u32);
+                        embedded_hal::digital::v2::OutputPin::set_low(green_led).unwrap();
+                    } else {
+                        embedded_hal::digital::v2::OutputPin::set_high(red_led).unwrap();
+                        lcd.set_cursor_pos(40, delay).unwrap();
+                        lcd.write_str("Access Denied!", delay).unwrap();
+                        delay.delay_ms(500u32);
+                        embedded_hal::digital::v2::OutputPin::set_low(red_led).unwrap();
+                    }
+                    lcd.clear(delay).unwrap();
+                    lcd.write_str("Access Control", delay).unwrap();
+                    lcd.set_cursor_pos(40, delay).unwrap();
+                    lcd.write_str("<<Scan Your Card", delay).unwrap();
+                }
+            }
+        }
+
+        cx.resources.irq.clear_interrupt();
+    }
+
     extern "C" {
         fn ADC0SS0();
         fn ADC0SS1();
+        fn ADC0SS2();
     }
 };
