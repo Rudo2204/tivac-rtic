@@ -72,7 +72,7 @@ jobs:
       - uses: fiam/arm-none-eabi-gcc@v1
         with:
           release: '10-2020-q4' # https://launchpad.net/gcc-arm-embedded/+series
-      - run: arm-none-eabi-obj-copy -O binary target/${{ martrix.target }}/release/${{ env.CRATE_NAME }} ${{ env.CRATE_NAME }}.bin
+      - run: arm-none-eabi-obj-copy -O binary target/thumbv7em-none-eabihf/release/${{ env.CRATE_NAME }} ${{ env.CRATE_NAME }}.bin
 
       - uses: actions/upload-artifact@master
         with:
@@ -101,6 +101,6 @@ jobs:
           prerelease: false
           files: |
             ${{ env.CRATE_NAME }}-${{ steps.get_version.outputs.VERSION }}.bin
-            target/${{ martrix.target }}/release/${{ env.CRATE_NAME }}
+            target/thumbv7em-none-eabihf/release/${{ env.CRATE_NAME }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
