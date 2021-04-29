@@ -260,19 +260,34 @@ const APP: () = {
             .unwrap();
     }
 
-    #[task(binds = GPIOB, resources = [irq, mfrc522, red_led, green_led, lcd, delay, mfrc522_buffer], priority = 1)]
+    #[task(binds = GPIOB,
+        resources = [uart, irq, mfrc522, red_led, green_led, lcd, delay, mfrc522_buffer, card_counter],
+        priority = 1)]
     fn iss2_event(cx: iss2_event::Context) {
+        let mut uart = cx.resources.uart;
         let mfrc522 = cx.resources.mfrc522;
         let red_led = cx.resources.red_led;
         let green_led = cx.resources.green_led;
         let mut lcd = cx.resources.lcd;
         let mut delay = cx.resources.delay;
         let buffer = cx.resources.mfrc522_buffer;
+        let mut card_counter = cx.resources.card_counter;
 
         if cx.resources.irq.get_interrupt_status() {
             if let Ok(atqa) = mfrc522.reqa() {
                 if let Ok(uid) = mfrc522.select(&atqa) {
                     let card_uid = uid.bytes();
+
+                    uart.lock(|uart| {
+                        write!(uart, "Card detected! ID bytes = ").unwrap();
+                        for byte in card_uid {
+                            write!(uart, "{}", byte).unwrap();
+                        }
+                        card_counter.lock(|card_counter| {
+                            *card_counter += 1;
+                            writeln!(uart, ", current card_counter = {}", card_counter).unwrap();
+                        });
+                    });
                     lcd.lock(|lcd| {
                         delay.lock(|delay| {
                             lcd.set_cursor_pos(0, delay).unwrap();
