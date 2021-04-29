@@ -44,8 +44,8 @@ const APP: () = {
         >,
         button_two: PF0<Input<PullUp>>,
         buffer: [u8; 10],
+        mfrc522_buffer: [u8; 10],
         irq: PB0<Input<Floating>>,
-        //irq: PF4<Input<Floating>>,
         mfrc522: Mfrc522<
             Spi<
                 SSI2,
@@ -129,7 +129,6 @@ const APP: () = {
         let nss = pins_b.pb5.into_push_pull_output();
 
         let mut irq = pins_b.pb0.into_floating_input();
-        //let mut irq = pins_f.pf4.into_floating_input();
         irq.set_interrupt_mode(InterruptMode::EdgeBoth);
 
         let spi = tm4c123x_hal::spi::Spi::spi2(
@@ -143,6 +142,7 @@ const APP: () = {
         let mfrc522 = Mfrc522::new(spi, OldOutputPin::from(nss)).unwrap();
 
         let buffer = [0u8; 10];
+        let mfrc522_buffer = [0u8; 10];
         lcd.write_str("<<Scan Your Card", &mut delay).unwrap();
 
         cx.spawn.lcd_increment().ok();
@@ -155,27 +155,22 @@ const APP: () = {
             lcd: lcd,
             button_two: button_two,
             buffer: buffer,
+            mfrc522_buffer: mfrc522_buffer,
             irq: irq,
             mfrc522: mfrc522,
         }
     }
 
-    #[task(schedule = [lcd_increment], resources = [delay, lcd, lcd_counter, buffer], priority = 1)]
+    #[task(schedule = [lcd_increment], resources = [delay, lcd, lcd_counter, buffer], priority = 2)]
     fn lcd_increment(cx: lcd_increment::Context) {
-        let mut delay = cx.resources.delay;
-        let mut lcd = cx.resources.lcd;
+        let delay = cx.resources.delay;
+        let lcd = cx.resources.lcd;
         let lcd_counter = cx.resources.lcd_counter;
-        let mut buffer = cx.resources.buffer;
+        let buffer = cx.resources.buffer;
 
-        lcd.lock(|lcd| {
-            delay.lock(|delay| {
-                lcd.set_cursor_pos(40, delay).unwrap();
-                buffer.lock(|buffer| {
-                    lcd.write_str(&lcd_counter.numtoa_str(10, buffer), delay)
-                        .unwrap();
-                });
-            });
-        });
+        lcd.set_cursor_pos(40, delay).unwrap();
+        lcd.write_str(&lcd_counter.numtoa_str(10, buffer), delay)
+            .unwrap();
 
         *lcd_counter += 1;
         cx.schedule
@@ -183,7 +178,7 @@ const APP: () = {
             .unwrap();
     }
 
-    #[task(binds = GPIOF, resources = [button_two, led_state, blue_led], priority = 2)]
+    #[task(binds = GPIOF, resources = [button_two, led_state, blue_led], priority = 1)]
     fn button_two(cx: button_two::Context) {
         let button_two = cx.resources.button_two;
         let blue_led = cx.resources.blue_led;
@@ -199,45 +194,38 @@ const APP: () = {
         button_two.clear_interrupt();
     }
 
-    #[task(binds = GPIOB,
-            resources = [irq, mfrc522, red_led, green_led, lcd, delay, buffer],
-            priority = 3)]
+    #[task(binds = GPIOB, resources = [irq, mfrc522, red_led, green_led, lcd, delay, mfrc522_buffer], priority = 1)]
     fn iss2_event(cx: iss2_event::Context) {
         let mfrc522 = cx.resources.mfrc522;
         let red_led = cx.resources.red_led;
         let green_led = cx.resources.green_led;
-        let lcd = cx.resources.lcd;
-        let delay = cx.resources.delay;
-        let buffer = cx.resources.buffer;
+        let mut lcd = cx.resources.lcd;
+        let mut delay = cx.resources.delay;
+        let buffer = cx.resources.mfrc522_buffer;
 
         if cx.resources.irq.get_interrupt_status() {
             if let Ok(atqa) = mfrc522.reqa() {
                 if let Ok(uid) = mfrc522.select(&atqa) {
-                    lcd.clear(delay).unwrap();
-                    lcd.set_cursor_pos(0, delay).unwrap();
-                    lcd.write_str("ID: ", delay).unwrap();
-
                     let card_uid = uid.bytes();
-                    for byte in card_uid {
-                        lcd.write_str(byte.numtoa_str(16, buffer), delay).unwrap();
-                    }
-                    if card_uid == &MASTER_CARD {
-                        embedded_hal::digital::v2::OutputPin::set_high(green_led).unwrap();
-                        lcd.set_cursor_pos(40, delay).unwrap();
-                        lcd.write_str("Access Granted!", delay).unwrap();
-                        delay.delay_ms(500u32);
-                        embedded_hal::digital::v2::OutputPin::set_low(green_led).unwrap();
-                    } else {
-                        embedded_hal::digital::v2::OutputPin::set_high(red_led).unwrap();
-                        lcd.set_cursor_pos(40, delay).unwrap();
-                        lcd.write_str("Access Denied!", delay).unwrap();
-                        delay.delay_ms(500u32);
-                        embedded_hal::digital::v2::OutputPin::set_low(red_led).unwrap();
-                    }
-                    lcd.clear(delay).unwrap();
-                    lcd.write_str("Access Control", delay).unwrap();
-                    lcd.set_cursor_pos(40, delay).unwrap();
-                    lcd.write_str("<<Scan Your Card", delay).unwrap();
+                    lcd.lock(|lcd| {
+                        delay.lock(|delay| {
+                            lcd.set_cursor_pos(0, delay).unwrap();
+                            lcd.write_str("ID: ", delay).unwrap();
+                            for byte in card_uid {
+                                lcd.write_str(byte.numtoa_str(16, buffer), delay).unwrap();
+                            }
+                            lcd.write_str("    ", delay).unwrap(); // clear traling "Card"
+                            if card_uid == &MASTER_CARD {
+                                embedded_hal::digital::v2::OutputPin::set_high(green_led).unwrap();
+                                delay.delay_ms(500u32);
+                                embedded_hal::digital::v2::OutputPin::set_low(green_led).unwrap();
+                            } else {
+                                embedded_hal::digital::v2::OutputPin::set_high(red_led).unwrap();
+                                delay.delay_ms(500u32);
+                                embedded_hal::digital::v2::OutputPin::set_low(red_led).unwrap();
+                            }
+                        })
+                    });
                 }
             }
         }
