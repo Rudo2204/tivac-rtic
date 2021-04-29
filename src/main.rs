@@ -281,7 +281,7 @@ const APP: () = {
                     uart.lock(|uart| {
                         write!(uart, "Card detected! ID bytes = ").unwrap();
                         for byte in card_uid {
-                            write!(uart, "{}", byte).unwrap();
+                            write!(uart, "{}", byte.numtoa_str(16, buffer)).unwrap();
                         }
                         card_counter.lock(|card_counter| {
                             *card_counter += 1;
