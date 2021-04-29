@@ -215,10 +215,12 @@ const APP: () = {
                                 lcd.write_str(byte.numtoa_str(16, buffer), delay).unwrap();
                             }
                             if card_uid == &MASTER_CARD {
+                                lcd.write_str(" :)", delay).unwrap();
                                 embedded_hal::digital::v2::OutputPin::set_high(green_led).unwrap();
                                 delay.delay_ms(500u32);
                                 embedded_hal::digital::v2::OutputPin::set_low(green_led).unwrap();
                             } else {
+                                lcd.write_str(" :(", delay).unwrap();
                                 embedded_hal::digital::v2::OutputPin::set_high(red_led).unwrap();
                                 delay.delay_ms(500u32);
                                 embedded_hal::digital::v2::OutputPin::set_low(red_led).unwrap();
