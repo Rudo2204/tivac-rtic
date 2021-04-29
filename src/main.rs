@@ -4,7 +4,7 @@
 use panic_halt as _; // you can put a breakpoint on `rust_begin_unwind` to catch panics
 
 use embedded_hal::digital::v1_compat::OldOutputPin;
-use hal::gpio::{AlternateFunction, Floating, Input, InterruptMode, Output, PullUp, PushPull, AF2};
+use hal::gpio::{AlternateFunction, Input, InterruptMode, Output, PullUp, PushPull, AF2};
 use hd44780_driver::{Cursor, CursorBlink, Display, DisplayMode, HD44780};
 use mfrc522::Mfrc522;
 use numtoa::NumToA;
@@ -45,7 +45,7 @@ const APP: () = {
         button_two: PF0<Input<PullUp>>,
         buffer: [u8; 10],
         mfrc522_buffer: [u8; 10],
-        irq: PB0<Input<Floating>>,
+        irq: PB0<Input<PullUp>>,
         mfrc522: Mfrc522<
             Spi<
                 SSI2,
@@ -128,8 +128,8 @@ const APP: () = {
         let mosi = pins_b.pb7.into_af_push_pull(&mut pins_b.control);
         let nss = pins_b.pb5.into_push_pull_output();
 
-        let mut irq = pins_b.pb0.into_floating_input();
-        irq.set_interrupt_mode(InterruptMode::EdgeBoth);
+        let mut irq = pins_b.pb0.into_pull_up_input();
+        irq.set_interrupt_mode(InterruptMode::LevelHigh);
 
         let spi = tm4c123x_hal::spi::Spi::spi2(
             peripherals.SSI2,
@@ -143,7 +143,7 @@ const APP: () = {
 
         let buffer = [0u8; 10];
         let mfrc522_buffer = [0u8; 10];
-        lcd.write_str("<<Scan Your Card", &mut delay).unwrap();
+        lcd.write_str("<<Scan Card", &mut delay).unwrap();
 
         cx.spawn.lcd_increment().ok();
 
@@ -214,7 +214,6 @@ const APP: () = {
                             for byte in card_uid {
                                 lcd.write_str(byte.numtoa_str(16, buffer), delay).unwrap();
                             }
-                            lcd.write_str("    ", delay).unwrap(); // clear traling "Card"
                             if card_uid == &MASTER_CARD {
                                 embedded_hal::digital::v2::OutputPin::set_high(green_led).unwrap();
                                 delay.delay_ms(500u32);
