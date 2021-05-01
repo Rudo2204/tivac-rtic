@@ -47,6 +47,11 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
+      - name: Install arm-none-eabi-objcopy
+        shell: bash
+        run: |
+            sudo apt install gcc-arm-none-eabi
+
       - uses: actions/cache@v2
         with:
           path: |
@@ -69,19 +74,16 @@ jobs:
           command: build
           args: --release --locked
 
-      - uses: actions/upload-artifact@master
-        if: startsWith(github.ref, 'refs/tags/v')
-        with:
-          name: ${{ env.CRATE_NAME }}
-          path: target/thumbv7em-none-eabihf/release/${{ env.CRATE_NAME }}
-
-      - name: arm-none-eabi-objcopy
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Run arm-none-eabi-objcopy
         shell: bash
         run: |
-            wget https://armkeil.blob.core.windows.net/developer/Files/downloads/gnu-rm/10-2020q4/gcc-arm-none-eabi-10-2020-q4-major-x86_64-linux.tar.bz2
-            tar -xaf gcc-arm-none-eabi-10-2020-q4-major-x86_64-linux.tar.bz2
-            gcc-arm-none-eabi-10-2020-q4-major/bin/arm-none-eabi-objcopy -O binary target/thumbv7em-none-eabihf/release/${{ env.CRATE_NAME }} ${{ env.CRATE_NAME }}.bin
+            arm-none-eabi-objcopy -O binary target/thumbv7em-none-eabihf/release/${{ env.CRATE_NAME }} ${{ env.CRATE_NAME }}.bin
+
+      - uses: actions/upload-artifact@v2
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          name: ${{ env.CRATE_NAME }}.bin
+          path: ${{ env.CRATE_NAME }}.bin
 
       - name: Get VERSION
         if: startsWith(github.ref, 'refs/tags/v')
@@ -104,7 +106,6 @@ jobs:
           draft: true
           prerelease: false
           files: |
-            target/thumbv7em-none-eabihf/release/${{ env.CRATE_NAME }}
             ${{ env.CRATE_NAME }}-${{ steps.get_version.outputs.VERSION }}.bin
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
