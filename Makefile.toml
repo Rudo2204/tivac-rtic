@@ -1,0 +1,11 @@
+[tasks.build]
+command = "cargo"
+args = ["build", "--release"]
+
+[tasks.arm-none-eabi-objcopy]
+command = "arm-none-eabi-objcopy"
+args = ["-O", "binary", "${CARGO_TARGET_DIR}/thumbv7em-none-eabihf/release/tivac_rtic", "binary/tivac_rtic.bin"]
+
+[tasks.flash]
+script = "sudo lm4flash binary/tivac_rtic.bin"
+dependencies = ["build", "arm-none-eabi-objcopy"]
